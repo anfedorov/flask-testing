@@ -389,16 +389,25 @@ class TestCase(unittest.TestCase):
     assert_500 = assert500
 
 
-# A LiveServerTestCase useful with Selenium or headless browsers
-# Inspired by https://docs.djangoproject.com/en/dev/topics/testing/#django.test.LiveServerTestCase
 
 class LiveServerTestCase(unittest.TestCase):
+    """A LiveServerTestCase useful with Selenium or headless browsers."""
+    def __init__(self, methodName='runTest'):
+        self._process = None
+        self.app = None
+        self.port = 5000
+        self._ctx = None
+
+        super(LiveServerTestCase, self).__init__(methodName)
+
+
     def create_app(self):
         """
         Create your Flask app here, with any
         configuration you need.
         """
         raise NotImplementedError
+
 
     def __call__(self, result=None):
         """
@@ -408,18 +417,17 @@ class LiveServerTestCase(unittest.TestCase):
 
         # Get the app
         self.app = self.create_app()
-        self.port = self.app.config.get('LIVESERVER_PORT', 5000)
+        self.port = self.app.config.get('LIVESERVER_PORT', self.port)
 
         # We need to create a context in order for extensions to catch up
         self._ctx = self.app.test_request_context()
         self._ctx.push()
 
         try:
-            self._spawn_live_server()
             super(LiveServerTestCase, self).__call__(result)
         finally:
             self._post_teardown()
-            self._terminate_live_server()
+            self.terminate_live_server()
 
     def get_server_url(self):
         """
@@ -427,8 +435,7 @@ class LiveServerTestCase(unittest.TestCase):
         """
         return 'http://localhost:%s' % self.port
 
-    def _spawn_live_server(self):
-        self._process = None
+    def spawn_live_server(self):
 
         worker = lambda app, port: app.run(port=port, use_reloader=False)
 
@@ -453,12 +460,18 @@ class LiveServerTestCase(unittest.TestCase):
             if self._can_ping_server():
                 break
 
+
+    def terminate_live_server(self):
+        if self._process:
+            self._process.terminate()
+
+
     def _can_ping_server(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         try:
             sock.connect(self._get_sever_address())
-        except socket.error as e:
+        except socket.error:
             success = False
         else:
             success = True
@@ -466,6 +479,7 @@ class LiveServerTestCase(unittest.TestCase):
             sock.close()
 
         return success
+
 
     def _get_sever_address(self):
         """
@@ -490,11 +504,8 @@ class LiveServerTestCase(unittest.TestCase):
 
         return host, port
 
+
     def _post_teardown(self):
         if getattr(self, '_ctx', None) is not None:
             self._ctx.pop()
             del self._ctx
-
-    def _terminate_live_server(self):
-        if self._process:
-            self._process.terminate()
