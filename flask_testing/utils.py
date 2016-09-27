@@ -11,7 +11,7 @@
 from __future__ import absolute_import, with_statement
 
 import gc
-import multiprocessing
+import requests
 import socket
 import time
 
@@ -393,7 +393,7 @@ class TestCase(unittest.TestCase):
 class LiveServerTestCase(unittest.TestCase):
     """A LiveServerTestCase useful with Selenium or headless browsers."""
     def __init__(self, methodName='runTest'):
-        self._process = None
+        self._thread = None
         self.app = None
         self.port = 5000
         self._ctx = None
@@ -429,21 +429,23 @@ class LiveServerTestCase(unittest.TestCase):
             self._post_teardown()
             self.terminate_live_server()
 
+
     def get_server_url(self):
         """
         Return the url of the test server
         """
         return 'http://localhost:%s' % self.port
 
+
     def spawn_live_server(self):
+        """Starts live server in separate multiprocessing.Process."""
+        from threading import Thread
 
         worker = lambda app, port: app.run(port=port, use_reloader=False)
 
-        self._process = multiprocessing.Process(
-            target=worker, args=(self.app, self.port)
-        )
-
-        self._process.start()
+        self._thread = Thread(target=worker, args=(self.app, self.port))
+        self._thread.daemon = True
+        self._thread.start()
 
         # We must wait for the server to start listening, but give up
         # after a specified maximum timeout
@@ -461,9 +463,20 @@ class LiveServerTestCase(unittest.TestCase):
                 break
 
 
+    def get(self, url='/', cookies=None):
+        url = '%s%s' % (self.get_server_url(), url)
+        return requests.get(url, cookies=cookies)
+
+
+    def post(self, url='/', json=None):
+        return requests.post('%s%s' % (self.get_server_url(), url), json=json)
+
+
     def terminate_live_server(self):
-        if self._process:
-            self._process.terminate()
+        """used to be necessary when processing was used instead of threading"""
+        if self._thread:
+            requests.post('%s/shutdown' % self.get_server_url())
+        self._thread = None
 
 
     def _can_ping_server(self):
