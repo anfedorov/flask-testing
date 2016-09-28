@@ -468,8 +468,8 @@ class LiveServerTestCase(unittest.TestCase):
         return requests.get(url, cookies=cookies)
 
 
-    def post(self, url='/', json=None):
-        return requests.post('%s%s' % (self.get_server_url(), url), json=json)
+    def post(self, url='/', json=None, cookies=None):
+        return requests.post('%s%s' % (self.get_server_url(), url), json=json, cookies=cookies)
 
 
     def terminate_live_server(self):
